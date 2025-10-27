@@ -16,6 +16,12 @@ interface Timer {
   created_at: string;
 }
 
+interface TimerTemplate {
+  name: string;
+  minutes: number;
+  id: string; // for better React keys and duplicate detection
+}
+
 function msToMMSS(ms: number) {
   const total = Math.max(0, Math.floor(ms / 1000));
   const m = Math.floor(total / 60);
@@ -30,13 +36,49 @@ function CreateTimerScreen({ onStartTimer, onDashboard, activeTimerCount }: {
 }) {
   const [minutes, setMinutes] = useState(25);
   const [sessionName, setSessionName] = useState("Focus Session");
+  const [templates, setTemplates] = useState<TimerTemplate[]>([
+    { id: "quick-focus", name: "Quick Focus", minutes: 15 },
+    { id: "pomodoro", name: "Pomodoro", minutes: 25 },
+    { id: "deep-work", name: "Deep Work", minutes: 45 },
+    { id: "long-focus", name: "Long Focus", minutes: 90 },
+  ]);
+  const [showAddTemplate, setShowAddTemplate] = useState(false);
+  const [newTemplateName, setNewTemplateName] = useState("");
 
-  const quickPresets = [
-    { name: "Quick Focus", minutes: 15 },
-    { name: "Pomodoro", minutes: 25 },
-    { name: "Deep Work", minutes: 45 },
-    { name: "Long Focus", minutes: 90 },
-  ];
+  // Load from localStorage on mount
+  useEffect(() => {
+    const saved = localStorage.getItem('focusnook_templates');
+    if (saved) {
+      try {
+        setTemplates(JSON.parse(saved));
+      } catch (e) {
+        console.error('Failed to load templates:', e);
+      }
+    }
+  }, []);
+
+  // Save to localStorage when templates change
+  useEffect(() => {
+    localStorage.setItem('focusnook_templates', JSON.stringify(templates));
+  }, [templates]);
+
+  const addTemplate = () => {
+    if (!newTemplateName.trim()) return;
+    
+    const newTemplate: TimerTemplate = {
+      id: `template-${Date.now()}`,
+      name: newTemplateName.trim(),
+      minutes: minutes
+    };
+    
+    setTemplates(prev => [...prev, newTemplate]);
+    setNewTemplateName("");
+    setShowAddTemplate(false);
+  };
+
+  const deleteTemplate = (id: string) => {
+    setTemplates(prev => prev.filter(t => t.id !== id));
+  };
 
   const handleStart = () => {
     onStartTimer(minutes * 60 * 1000, sessionName);
@@ -92,21 +134,73 @@ function CreateTimerScreen({ onStartTimer, onDashboard, activeTimerCount }: {
             <div className="text-white/50 text-sm">({msToMMSS(minutes * 60 * 1000)})</div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            {quickPresets.map((preset) => (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-white/70">Templates</span>
               <button
-                key={preset.name}
-                onClick={() => setMinutes(preset.minutes)}
-                className={`p-3 rounded-xl border transition ${
-                  minutes === preset.minutes 
-                    ? 'border-cyan-400/50 bg-cyan-500/20 text-cyan-300' 
-                    : 'border-white/10 bg-white/5 hover:bg-white/10'
-                }`}
+                onClick={() => setShowAddTemplate(true)}
+                className="text-xs px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/30 text-emerald-300 transition"
               >
-                <div className="font-medium text-sm">{preset.name}</div>
-                <div className="text-xs text-white/60">{preset.minutes}m</div>
+                + Add Template
               </button>
-            ))}
+            </div>
+
+            {showAddTemplate && (
+              <div className="p-4 rounded-xl bg-white/5 border border-white/10 space-y-3">
+                <input
+                  type="text"
+                  value={newTemplateName}
+                  onChange={(e) => setNewTemplateName(e.target.value)}
+                  placeholder="Template name"
+                  className="w-full bg-white/10 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 ring-cyan-300/40"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') addTemplate();
+                    if (e.key === 'Escape') setShowAddTemplate(false);
+                  }}
+                  autoFocus
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={addTemplate}
+                    disabled={!newTemplateName.trim()}
+                    className="px-3 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 disabled:bg-emerald-500/50 text-sm font-medium"
+                  >
+                    Save ({minutes}m)
+                  </button>
+                  <button
+                    onClick={() => setShowAddTemplate(false)}
+                    className="px-3 py-2 rounded-lg bg-white/10 hover:bg-white/15 text-sm"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-3">
+              {templates.map((template) => (
+                <div key={template.id} className="relative">
+                  <button
+                    onClick={() => setMinutes(template.minutes)}
+                    className={`w-full p-3 rounded-xl border transition ${
+                      minutes === template.minutes 
+                        ? 'border-cyan-400/50 bg-cyan-500/20 text-cyan-300' 
+                        : 'border-white/10 bg-white/5 hover:bg-white/10'
+                    }`}
+                  >
+                    <div className="font-medium text-sm">{template.name}</div>
+                    <div className="text-xs text-white/60">{template.minutes}m</div>
+                  </button>
+                  
+                  <button
+                    onClick={() => deleteTemplate(template.id)}
+                    className="absolute top-1 right-1 w-5 h-5 rounded-full bg-red-500 hover:bg-red-600 text-white text-xs flex items-center justify-center"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
 
