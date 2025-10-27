@@ -56,9 +56,9 @@ function CreateTimerScreen({ onStartTimer, onDashboard, activeTimerCount }: {
           <div className="w-[84px]"></div>
         </div>
         <p className="text-sm text-white/60">Set up your focus session</p>
-        {activeTimerCount && activeTimerCount > 0 && (
+        {!!activeTimerCount && (
           <div className="text-xs text-emerald-400 mt-2">
-            {activeTimerCount} timer{activeTimerCount > 1 ? 's' : ''} running in background
+            {activeTimerCount} timer{activeTimerCount > 1 ? "s" : ""} running in background
           </div>
         )}
       </header>
