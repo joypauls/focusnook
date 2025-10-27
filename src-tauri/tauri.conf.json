@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "focusnook",
+  "productName": "FocusNook",
   "version": "0.1.0",
   "identifier": "com.joypaulsen.focusnook",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "focusnook",
+        "title": "FocusNook",
         "width": 1000,
         "height": 800
       }

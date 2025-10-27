@@ -1,3 +1,40 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Custom slider styles */
+.slider {
+  -webkit-appearance: none;
+  background: transparent;
+}
+
+.slider::-webkit-slider-track {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  height: 8px;
+}
+
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  background: rgb(34, 197, 94);
+  border-radius: 50%;
+  height: 18px;
+  width: 18px;
+  cursor: pointer;
+}
+
+.slider::-moz-range-track {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  height: 8px;
+  border: none;
+}
+
+.slider::-moz-range-thumb {
+  background: rgb(34, 197, 94);
+  border-radius: 50%;
+  height: 18px;
+  width: 18px;
+  border: none;
+  cursor: pointer;
+}

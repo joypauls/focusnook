@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { Navbar } from "./components/Navbar";
+import { SettingsMenu, SoundSettings } from "./components/SettingsMenu";
 
 type AppScreen = "dashboard" | "create" | "timer";
 
@@ -475,6 +477,11 @@ export default function App() {
   const [timers, setTimers] = useState<Timer[]>([]);
   const [selectedTimerId, setSelectedTimerId] = useState<string | null>(null);
   const [donePulse, setDonePulse] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [soundSettings, setSoundSettings] = useState<SoundSettings>({
+    soundFile: "/beep1.mp3",
+    volume: 0.5
+  });
 
   useEffect(() => {
     const unsubs: Array<() => void> = [];
@@ -533,10 +540,12 @@ export default function App() {
         setTimers(prevTimers => 
           prevTimers.map(timer => {
             if (timer.id === timer_id) {
-              // Timer just completed
-              const audio = new Audio("/beep1.mp3");
-              audio.volume = 0.5;
-              audio.play().catch(() => {});
+              // Timer just completed - play sound according to settings
+              if (soundSettings.soundFile !== "none") {
+                const audio = new Audio(soundSettings.soundFile);
+                audio.volume = soundSettings.volume;
+                audio.play().catch(() => {});
+              }
               setDonePulse(true);
               setTimeout(() => setDonePulse(false), 1200);
               
@@ -655,7 +664,17 @@ export default function App() {
   return (
     <div className="relative min-h-screen w-screen bg-gradient-to-b from-[#2d1b3d] to-[#1a0d25] text-white">
       <div className="absolute inset-0 bg-gradient-to-b from-[#2d1b3d] to-[#1a0d25]" />
-      <div className="relative z-10 w-full flex justify-center p-4 py-8">
+      
+      <Navbar onSettingsClick={() => setSettingsOpen(true)} />
+      
+      <SettingsMenu
+        isOpen={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        settings={soundSettings}
+        onSettingsChange={setSoundSettings}
+      />
+      
+      <div className="relative z-10 w-full flex justify-center p-4 py-8 pt-20">
         {screen === "dashboard" ? (
           <DashboardScreen
             timers={timers}
