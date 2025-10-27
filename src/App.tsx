@@ -42,6 +42,7 @@ function CreateTimerScreen({ onStartTimer, onDashboard, activeTimerCount }: {
   const [newTemplateName, setNewTemplateName] = useState("");
   const [isLoaded, setIsLoaded] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
 
   // Load from localStorage on mount
   useEffect(() => {
@@ -78,12 +79,34 @@ function CreateTimerScreen({ onStartTimer, onDashboard, activeTimerCount }: {
     };
     
     setTemplates(prev => [...prev, newTemplate]);
+    setSelectedTemplateId(newTemplate.id);
     setNewTemplateName("");
     setShowAddTemplate(false);
   };
 
   const deleteTemplate = (id: string) => {
     setTemplates(prev => prev.filter(t => t.id !== id));
+    // Clear selection if we're deleting the selected template
+    if (selectedTemplateId === id) {
+      setSelectedTemplateId(null);
+    }
+  };
+
+  const selectTemplate = (template: TimerTemplate) => {
+    setMinutes(template.minutes);
+    setSelectedTemplateId(template.id);
+  };
+
+  // Clear template selection when minutes are manually changed
+  const handleMinutesChange = (value: number) => {
+    setMinutes(value);
+    // Only clear selection if the new value doesn't match the selected template
+    if (selectedTemplateId) {
+      const selectedTemplate = templates.find(t => t.id === selectedTemplateId);
+      if (selectedTemplate && selectedTemplate.minutes !== value) {
+        setSelectedTemplateId(null);
+      }
+    }
   };
 
   const resetToDefaults = () => {
@@ -150,7 +173,7 @@ function CreateTimerScreen({ onStartTimer, onDashboard, activeTimerCount }: {
               min={1} 
               max={180}
               value={minutes}
-              onChange={(e) => setMinutes(parseInt(e.target.value || "1", 10))}
+              onChange={(e) => handleMinutesChange(parseInt(e.target.value || "1", 10))}
               className="w-24 bg-white/10 border border-white/10 rounded-xl px-4 py-3 outline-none focus:ring-2 ring-cyan-300/40 text-center"
             />
             <span className="text-white/70">minutes</span>
@@ -233,9 +256,9 @@ function CreateTimerScreen({ onStartTimer, onDashboard, activeTimerCount }: {
               {templates.map((template) => (
                 <div key={template.id} className="relative">
                   <button
-                    onClick={() => setMinutes(template.minutes)}
+                    onClick={() => selectTemplate(template)}
                     className={`w-full p-3 rounded-xl border transition ${
-                      minutes === template.minutes 
+                      selectedTemplateId === template.id
                         ? 'border-cyan-400/50 bg-cyan-500/20 text-cyan-300' 
                         : 'border-white/10 bg-white/5 hover:bg-white/10'
                     }`}
@@ -734,7 +757,6 @@ export default function App() {
       setScreen("timer");
     } catch (error) {
       console.error("Failed to create timer:", error);
-      alert(`Failed to create timer: ${(error as any)?.message || error}`);
     }
   };
 
