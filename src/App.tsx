@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { Navbar } from "./components/Navbar";
 import { SettingsMenu, SoundSettings } from "./components/SettingsMenu";
+import defaultTemplates from "./data/defaultTimerTemplates.json";
 
 type AppScreen = "dashboard" | "create" | "timer";
 
@@ -36,14 +37,11 @@ function CreateTimerScreen({ onStartTimer, onDashboard, activeTimerCount }: {
 }) {
   const [minutes, setMinutes] = useState(25);
   const [sessionName, setSessionName] = useState("Focus Session");
-  const [templates, setTemplates] = useState<TimerTemplate[]>([
-    { id: "quick-focus", name: "Quick Focus", minutes: 15 },
-    { id: "pomodoro", name: "Pomodoro", minutes: 25 },
-    { id: "deep-work", name: "Deep Work", minutes: 45 },
-    { id: "long-focus", name: "Long Focus", minutes: 90 },
-  ]);
+  const [templates, setTemplates] = useState<TimerTemplate[]>([]);
   const [showAddTemplate, setShowAddTemplate] = useState(false);
   const [newTemplateName, setNewTemplateName] = useState("");
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   // Load from localStorage on mount
   useEffect(() => {
@@ -53,14 +51,22 @@ function CreateTimerScreen({ onStartTimer, onDashboard, activeTimerCount }: {
         setTemplates(JSON.parse(saved));
       } catch (e) {
         console.error('Failed to load templates:', e);
+        // Fall back to defaults if loading fails
+        setTemplates(defaultTemplates);
       }
+    } else {
+      // First time - set defaults from JSON file
+      setTemplates(defaultTemplates);
     }
+    setIsLoaded(true);
   }, []);
 
-  // Save to localStorage when templates change
+  // Save to localStorage when templates change (but only after initial load)
   useEffect(() => {
-    localStorage.setItem('focusnook_templates', JSON.stringify(templates));
-  }, [templates]);
+    if (isLoaded) {
+      localStorage.setItem('focusnook_templates', JSON.stringify(templates));
+    }
+  }, [templates, isLoaded]);
 
   const addTemplate = () => {
     if (!newTemplateName.trim()) return;
@@ -78,6 +84,23 @@ function CreateTimerScreen({ onStartTimer, onDashboard, activeTimerCount }: {
 
   const deleteTemplate = (id: string) => {
     setTemplates(prev => prev.filter(t => t.id !== id));
+  };
+
+  const resetToDefaults = () => {
+    setTemplates([...defaultTemplates]); // Use spread operator to ensure new array reference
+  };
+
+  const handleResetClick = () => {
+    setShowResetConfirm(true);
+  };
+
+  const confirmReset = () => {
+    resetToDefaults();
+    setShowResetConfirm(false);
+  };
+
+  const cancelReset = () => {
+    setShowResetConfirm(false);
   };
 
   const handleStart = () => {
@@ -137,13 +160,42 @@ function CreateTimerScreen({ onStartTimer, onDashboard, activeTimerCount }: {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <span className="text-sm text-white/70">Templates</span>
-              <button
-                onClick={() => setShowAddTemplate(true)}
-                className="text-xs px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/30 text-emerald-300 transition"
-              >
-                + Add Template
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleResetClick}
+                  className="text-xs px-3 py-1.5 rounded-lg bg-slate-500/20 hover:bg-slate-500/30 border border-slate-500/30 text-slate-300 transition"
+                  title="Reset to default templates"
+                >
+                  Reset
+                </button>
+                <button
+                  onClick={() => setShowAddTemplate(true)}
+                  className="text-xs px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/30 text-emerald-300 transition"
+                >
+                  + Add Template
+                </button>
+              </div>
             </div>
+
+            {showResetConfirm && (
+              <div className="p-4 rounded-xl bg-white/5 border border-white/10 space-y-3">
+                <p className="text-sm text-white/80">Reset to default templates? This will remove all your custom templates.</p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={confirmReset}
+                    className="px-3 py-2 rounded-lg bg-red-500 hover:bg-red-400 text-sm font-medium transition"
+                  >
+                    Reset Templates
+                  </button>
+                  <button
+                    onClick={cancelReset}
+                    className="px-3 py-2 rounded-lg bg-white/10 hover:bg-white/15 text-sm transition"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
 
             {showAddTemplate && (
               <div className="p-4 rounded-xl bg-white/5 border border-white/10 space-y-3">

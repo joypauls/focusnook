@@ -1,0 +1,22 @@
+[
+  {
+    "id": "quick-focus",
+    "name": "Quick Focus",
+    "minutes": 15
+  },
+  {
+    "id": "pomodoro", 
+    "name": "Pomodoro",
+    "minutes": 25
+  },
+  {
+    "id": "deep-work",
+    "name": "Deep Work", 
+    "minutes": 45
+  },
+  {
+    "id": "long-focus",
+    "name": "Long Focus",
+    "minutes": 90
+  }
+]
