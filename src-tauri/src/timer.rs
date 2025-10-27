@@ -1,9 +1,10 @@
-do use std::collections::HashMap;
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter};
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
+use chrono::Utc;
 
 /// Timer data that can be serialized and sent to the frontend
 #[derive(serde::Serialize, Clone, Debug)]
@@ -61,12 +62,13 @@ impl TimerState {
     }
 
     pub fn create_timer(&self, id: String, name: String, duration_ms: i64) -> Result<Timer, String> {
-        let mut inner = self.0.lock().unwrap();
+        let mut inner = self.0.lock().map_err(|_| "Failed to lock timer state".to_string())?;
         
         if inner.timers.contains_key(&id) {
             return Err("Timer with this ID already exists".to_string());
         }
 
+        let created_at = Utc::now().to_rfc3339();
         let timer_instance = TimerInstance {
             id: id.clone(),
             name: name.clone(),
@@ -77,7 +79,7 @@ impl TimerState {
             cancel_tx: None,
             running: false,
             completed: false,
-            created_at: chrono::Utc::now().to_rfc3339(),
+            created_at: created_at.clone(),
         };
 
         inner.timers.insert(id.clone(), timer_instance);
@@ -89,7 +91,7 @@ impl TimerState {
             remaining_ms: duration_ms,
             running: false,
             completed: false,
-            created_at: chrono::Utc::now().to_rfc3339(),
+            created_at,
         })
     }
 

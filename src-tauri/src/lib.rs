@@ -5,19 +5,14 @@ use tauri::{App, AppHandle, Manager};
 use timer::{TimerState, Timer};
 
 #[tauri::command]
-async fn create_timer(
+fn make_timer(
   state: tauri::State<'_, TimerState>,
   id: String,
   name: String,
   duration_ms: i64
 ) -> Result<Timer, String> {
-  println!("create_timer called with id: {}, name: {}, duration_ms: {}", id, name, duration_ms);
-  let result = state.create_timer(id, name, duration_ms);
-  match &result {
-    Ok(timer) => println!("Timer created successfully: {:?}", timer),
-    Err(e) => println!("Failed to create timer: {}", e),
-  }
-  result
+  println!("Creating timer: {} ({})", name, id);
+  state.create_timer(id, name, duration_ms)
 }
 
 #[tauri::command]
@@ -25,11 +20,14 @@ async fn get_all_timers(state: tauri::State<'_, TimerState>) -> Result<Vec<Timer
   Ok(state.get_all_timers())
 }
 
+
+
 #[tauri::command]
-async fn delete_timer(
+fn delete_timer(
   state: tauri::State<'_, TimerState>,
   timer_id: String
 ) -> Result<(), String> {
+  println!("Deleting timer: {}", timer_id);
   state.delete_timer(&timer_id)
 }
 
@@ -39,13 +37,8 @@ async fn start_timer(
   state: tauri::State<'_, TimerState>,
   timer_id: String
 ) -> Result<(), String> {
-  println!("start_timer called with timer_id: {}", timer_id);
-  let result = state.start_timer(app, &timer_id);
-  match &result {
-    Ok(_) => println!("Timer started successfully"),
-    Err(e) => println!("Failed to start timer: {}", e),
-  }
-  result
+  println!("Starting timer: {}", timer_id);
+  state.start_timer(app, &timer_id)
 }
 
 #[tauri::command]
@@ -54,6 +47,7 @@ async fn pause_timer(
   state: tauri::State<'_, TimerState>,
   timer_id: String
 ) -> Result<(), String> {
+  println!("Pausing timer: {}", timer_id);
   state.pause_timer(app, &timer_id)
 }
 
@@ -63,6 +57,7 @@ async fn resume_timer(
   state: tauri::State<'_, TimerState>,
   timer_id: String
 ) -> Result<(), String> {
+  println!("Resuming timer: {}", timer_id);
   state.resume_timer(app, &timer_id)
 }
 
@@ -72,6 +67,7 @@ async fn reset_timer(
   state: tauri::State<'_, TimerState>,
   timer_id: String
 ) -> Result<(), String> {
+  println!("Resetting timer: {}", timer_id);
   state.reset_timer(app, &timer_id)
 }
 
@@ -83,7 +79,7 @@ pub fn run() {
       Ok(())
     })
     .invoke_handler(tauri::generate_handler![
-      create_timer,
+      make_timer,
       get_all_timers,
       delete_timer,
       start_timer,

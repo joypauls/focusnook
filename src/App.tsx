@@ -52,9 +52,8 @@ function CreateTimerScreen({ onStartTimer, onDashboard, activeTimerCount }: {
           </button>
           <div className="text-center flex-1">
             <h1 className="text-3xl font-semibold">Create Timer</h1>
-
           </div>
-          <div className="w-[84px]"></div> {/* Spacer for balance */}
+          <div className="w-[84px]"></div>
         </div>
         <p className="text-sm text-white/60">Set up your focus session</p>
         {activeTimerCount && activeTimerCount > 0 && (
@@ -174,7 +173,6 @@ function TimerScreen({
           <div>
             <h1 className="text-2xl font-semibold">{timerName || "Focus Timer"}</h1>
             <p className="text-sm text-white/60 mt-1">Stay focused and productive</p>
-
           </div>
         </div>
         <div className="flex gap-2">
@@ -211,7 +209,6 @@ function TimerScreen({
       </div>
 
       <div className="flex flex-wrap justify-center gap-4">
-        {/* Debug info */}
         <div className="w-full text-center text-xs text-white/40 mb-2">
           Debug: running={running.toString()}, remaining={remaining_ms}, duration={duration_ms}
         </div>
@@ -225,7 +222,11 @@ function TimerScreen({
             <button onClick={onResume} className="px-6 py-3 rounded-xl bg-cyan-500 hover:bg-cyan-400 focus:ring-2 ring-cyan-300/50 transition font-medium">
               Resume
             </button>
-          ) : null
+          ) : (
+            <button onClick={onReset} className="px-6 py-3 rounded-xl bg-slate-500 hover:bg-slate-400 focus:ring-2 ring-slate-300/50 transition font-medium">
+              Reset to Start
+            </button>
+          )
         ) : (
           <button onClick={onPause} className="px-6 py-3 rounded-xl bg-amber-500 hover:bg-amber-400 focus:ring-2 ring-amber-300/50 transition font-medium">
             Pause
@@ -299,10 +300,7 @@ function DashboardScreen({
                 key={timer.id}
                 timer={timer}
                 onClick={() => onSelectTimer(timer.id)}
-                onDelete={() => {
-                  console.log('DashboardScreen calling onDeleteTimer for:', timer.id);
-                  onDeleteTimer(timer.id);
-                }}
+                onDelete={() => onDeleteTimer(timer.id)}
               />
             ))}
           </div>
@@ -505,88 +503,54 @@ export default function App() {
     
     document.addEventListener('keydown', handleKeyPress);
 
-    // Check if running in Tauri or browser
-    if (typeof window !== 'undefined' && '__TAURI__' in window) {
-      // Tauri mode - load timers from Rust backend
-      const loadTimers = async () => {
-        try {
-          const backendTimers = await invoke<Timer[]>("get_all_timers");
-          setTimers(backendTimers);
-        } catch (error) {
-          console.error("Failed to load timers:", error);
-        }
-      };
+    // Load timers from Rust backend
+    const loadTimers = async () => {
+      try {
+        const backendTimers = await invoke<Timer[]>("get_all_timers");
+        setTimers(backendTimers);
+      } catch (error) {
+        console.error("Failed to load timers:", error);
+      }
+    };
 
-      loadTimers();
+    loadTimers();
 
-      // Listen for timer tick events from Rust backend
-      const setupTimerListeners = async () => {
-        const unlistenTick = await listen<{timer_id: string, remaining_ms: number, duration_ms: number, running: boolean}>("timer:tick", (event) => {
-          const { timer_id, remaining_ms } = event.payload;
-          setTimers(prevTimers => 
-            prevTimers.map(timer => 
-              timer.id === timer_id 
-                ? { ...timer, remaining_ms, running: true, completed: false }
-                : timer
-            )
-          );
-        });
+    // Listen for timer tick events from Rust backend
+    const setupTimerListeners = async () => {
+      const unlistenTick = await listen<{timer_id: string, remaining_ms: number, duration_ms: number, running: boolean}>("timer:tick", (event) => {
+        const { timer_id, remaining_ms } = event.payload;
+        setTimers(prevTimers => 
+          prevTimers.map(timer => 
+            timer.id === timer_id 
+              ? { ...timer, remaining_ms, running: true, completed: false }
+              : timer
+          )
+        );
+      });
 
-        const unlistenDone = await listen<{timer_id: string, finished_at: string}>("timer:done", (event) => {
-          const { timer_id } = event.payload;
-          setTimers(prevTimers => 
-            prevTimers.map(timer => {
-              if (timer.id === timer_id) {
-                // Timer just completed
-                const audio = new Audio("/beep1.mp3");
-                audio.volume = 0.5;
-                audio.play().catch(() => {});
-                setDonePulse(true);
-                setTimeout(() => setDonePulse(false), 1200);
-                
-                return { ...timer, remaining_ms: 0, running: false, completed: true };
-              }
-              return timer;
-            })
-          );
-        });
-
-        unsubs.push(unlistenTick, unlistenDone);
-      };
-
-      setupTimerListeners();
-    } else {
-      // Browser mode - use frontend timer simulation
-      console.log("Running in browser mode - using frontend timer simulation");
-      const interval = setInterval(() => {
+      const unlistenDone = await listen<{timer_id: string, finished_at: string}>("timer:done", (event) => {
+        const { timer_id } = event.payload;
         setTimers(prevTimers => 
           prevTimers.map(timer => {
-            if (!timer.running || timer.completed) return timer;
-            
-            const newRemaining = Math.max(0, timer.remaining_ms - 1000);
-            const completed = newRemaining === 0;
-            
-            if (completed && !timer.completed) {
+            if (timer.id === timer_id) {
               // Timer just completed
               const audio = new Audio("/beep1.mp3");
               audio.volume = 0.5;
               audio.play().catch(() => {});
               setDonePulse(true);
               setTimeout(() => setDonePulse(false), 1200);
+              
+              return { ...timer, remaining_ms: 0, running: false, completed: true };
             }
-            
-            return {
-              ...timer,
-              remaining_ms: newRemaining,
-              running: !completed,
-              completed
-            };
+            return timer;
           })
         );
-      }, 1000);
+      });
 
-      unsubs.push(() => clearInterval(interval));
-    }
+      unsubs.push(unlistenTick, unlistenDone);
+    };
+
+    setupTimerListeners();
 
     return () => {
       document.removeEventListener("keydown", handleKeyPress);
@@ -595,55 +559,27 @@ export default function App() {
   }, []);
 
   const handleStartTimer = async (duration: number, name: string) => {
-    console.log("handleStartTimer called with:", { duration, name });
-    
-    // Check if Tauri is available
-    if (typeof window !== 'undefined' && '__TAURI__' in window) {
-      // Tauri mode - use Rust backend
-      try {
-        const timerId = Date.now().toString();
-        console.log("Creating timer with ID:", timerId);
-        
-        const newTimer = await invoke<Timer>("create_timer", {
-          id: timerId,
-          name,
-          duration_ms: duration
-        });
-        
-        console.log("Timer created successfully:", newTimer);
-        setTimers(prev => [...prev, newTimer]);
-        
-        // Start the timer in the Rust backend
-        console.log("Starting timer in backend...");
-        await invoke("start_timer", { timer_id: timerId });
-        console.log("Timer started successfully");
-        
-        setSelectedTimerId(timerId);
-        setScreen("timer");
-      } catch (error) {
-        console.error("Failed to create/start timer:", error);
-      }
-    } else {
-      // Browser mode - use frontend simulation
-      console.log("Running in browser mode - using frontend timer simulation");
-      const newTimer: Timer = {
-        id: Date.now().toString(),
-        name,
-        duration_ms: duration,
-        remaining_ms: duration,
-        running: true,
-        completed: false,
-        created_at: new Date().toISOString()
-      };
+    try {
+      const timerId = Date.now().toString();
       
-      console.log("Created timer in browser mode:", newTimer);
-      setTimers(prev => {
-        const updated = [...prev, newTimer];
-        console.log("Updated timers array:", updated);
-        return updated;
+      const newTimer = await invoke<Timer>("make_timer", {
+        id: timerId,
+        name: name,
+        durationMs: duration
       });
+      
+      await invoke("start_timer", { 
+        timerId: newTimer.id
+      });
+      
+      const startedTimer = { ...newTimer, running: true };
+      setTimers(prev => [...prev, startedTimer]);
+      
       setSelectedTimerId(newTimer.id);
       setScreen("timer");
+    } catch (error) {
+      console.error("Failed to create timer:", error);
+      alert(`Failed to create timer: ${(error as any)?.message || error}`);
     }
   };
 
@@ -665,87 +601,54 @@ export default function App() {
   const selectedTimer = timers.find(t => t.id === selectedTimerId);
 
   const start = async (timerId: string) => { 
-    if (typeof window !== 'undefined' && '__TAURI__' in window) {
-      try {
-        await invoke("start_timer", { timer_id: timerId });
-      } catch (error) {
-        console.error("Failed to start timer:", error);
-      }
-    } else {
-      setTimers(prev => prev.map(t => 
-        t.id === timerId ? { ...t, running: true } : t
-      ));
+    try {
+      await invoke("start_timer", { timerId: timerId });
+    } catch (error) {
+      console.error("Failed to start timer:", error);
     }
   };
   
   const pause = async (timerId: string) => { 
-    if (typeof window !== 'undefined' && '__TAURI__' in window) {
-      try {
-        await invoke("pause_timer", { timer_id: timerId });
-        setTimers(prev => prev.map(t => 
-          t.id === timerId ? { ...t, running: false } : t
-        ));
-      } catch (error) {
-        console.error("Failed to pause timer:", error);
-      }
-    } else {
+    try {
+      await invoke("pause_timer", { timerId: timerId });
       setTimers(prev => prev.map(t => 
         t.id === timerId ? { ...t, running: false } : t
       ));
+    } catch (error) {
+      console.error("Failed to pause timer:", error);
     }
   };
   
   const resume = async (timerId: string) => { 
-    if (typeof window !== 'undefined' && '__TAURI__' in window) {
-      try {
-        await invoke("resume_timer", { timer_id: timerId });
-      } catch (error) {
-        console.error("Failed to resume timer:", error);
-      }
-    } else {
-      setTimers(prev => prev.map(t => 
-        t.id === timerId ? { ...t, running: true } : t
-      ));
+    try {
+      await invoke("resume_timer", { timerId: timerId });
+    } catch (error) {
+      console.error("Failed to resume timer:", error);
     }
   };
   
   const reset = async (timerId: string) => { 
-    if (typeof window !== 'undefined' && '__TAURI__' in window) {
-      try {
-        await invoke("reset_timer", { timer_id: timerId });
-        setTimers(prev => prev.map(t => 
-          t.id === timerId ? { ...t, remaining_ms: t.duration_ms, running: false, completed: false } : t
-        ));
-      } catch (error) {
-        console.error("Failed to reset timer:", error);
-      }
-    } else {
+    try {
+      await invoke("reset_timer", { timerId: timerId });
       setTimers(prev => prev.map(t => 
         t.id === timerId ? { ...t, remaining_ms: t.duration_ms, running: false, completed: false } : t
       ));
+    } catch (error) {
+      console.error("Failed to reset timer:", error);
     }
   };
 
   const deleteTimer = async (timerId: string) => {
-    if (typeof window !== 'undefined' && '__TAURI__' in window) {
-      try {
-        await invoke("delete_timer", { timer_id: timerId });
-        setTimers(prev => prev.filter(t => t.id !== timerId));
-        
-        if (selectedTimerId === timerId) {
-          setScreen("dashboard");
-          setSelectedTimerId(null);
-        }
-      } catch (error) {
-        console.error("Failed to delete timer:", error);
-      }
-    } else {
+    try {
+      await invoke("delete_timer", { timerId: timerId });
       setTimers(prev => prev.filter(t => t.id !== timerId));
       
       if (selectedTimerId === timerId) {
         setScreen("dashboard");
         setSelectedTimerId(null);
       }
+    } catch (error) {
+      console.error("Failed to delete timer:", error);
     }
   };
 
