@@ -293,3 +293,218 @@ impl TimerState {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_create_timer() {
+        let state = TimerState::new();
+        let timer = state.create_timer(
+            "test1".to_string(),
+            "Test Timer".to_string(),
+            5000
+        ).unwrap();
+
+        assert_eq!(timer.id, "test1");
+        assert_eq!(timer.name, "Test Timer");
+        assert_eq!(timer.duration_ms, 5000);
+        assert_eq!(timer.remaining_ms, 5000);
+        assert!(!timer.running);
+        assert!(!timer.completed);
+    }
+
+    #[test]
+    fn test_create_duplicate_timer_fails() {
+        let state = TimerState::new();
+        
+        // Create first timer
+        state.create_timer("test1".to_string(), "Test Timer".to_string(), 5000).unwrap();
+        
+        // Try to create duplicate - should fail
+        let result = state.create_timer("test1".to_string(), "Duplicate Timer".to_string(), 3000);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "Timer with this ID already exists");
+    }
+
+    #[test]
+    fn test_get_all_timers() {
+        let state = TimerState::new();
+        
+        // Initially empty
+        assert_eq!(state.get_all_timers().len(), 0);
+        
+        // Add a timer
+        state.create_timer("test1".to_string(), "Test Timer 1".to_string(), 5000).unwrap();
+        let timers = state.get_all_timers();
+        assert_eq!(timers.len(), 1);
+        assert_eq!(timers[0].id, "test1");
+        
+        // Add another timer
+        state.create_timer("test2".to_string(), "Test Timer 2".to_string(), 3000).unwrap();
+        let timers = state.get_all_timers();
+        assert_eq!(timers.len(), 2);
+    }
+
+    #[test]
+    fn test_delete_timer() {
+        let state = TimerState::new();
+        
+        // Create timer
+        state.create_timer("test1".to_string(), "Test Timer".to_string(), 5000).unwrap();
+        assert_eq!(state.get_all_timers().len(), 1);
+        
+        // Delete timer
+        let result = state.delete_timer("test1");
+        assert!(result.is_ok());
+        assert_eq!(state.get_all_timers().len(), 0);
+        
+        // Try to delete non-existent timer
+        let result = state.delete_timer("nonexistent");
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "Timer not found");
+    }
+
+    #[test]
+    fn test_timer_initial_state() {
+        let state = TimerState::new();
+        let timer = state.create_timer(
+            "test1".to_string(),
+            "Test Timer".to_string(),
+            10000
+        ).unwrap();
+
+        // Timer should start in a stopped state
+        assert!(!timer.running);
+        assert!(!timer.completed);
+        assert_eq!(timer.remaining_ms, timer.duration_ms);
+        assert!(!timer.created_at.is_empty());
+    }
+
+    #[test]
+    fn test_timer_not_found_operations() {
+        let state = TimerState::new();
+        
+        // We can't easily test the start/pause/resume/reset functions without a proper AppHandle
+        // but we can at least test that error handling works for timer lookup
+        {
+            let inner = state.0.lock().unwrap();
+            assert!(inner.timers.get("nonexistent").is_none());
+        }
+    }
+
+    #[test]
+    fn test_create_timer_with_zero_duration() {
+        let state = TimerState::new();
+        let timer = state.create_timer(
+            "zero_timer".to_string(),
+            "Zero Duration Timer".to_string(),
+            0
+        ).unwrap();
+
+        assert_eq!(timer.duration_ms, 0);
+        assert_eq!(timer.remaining_ms, 0);
+        assert!(!timer.running);
+        assert!(!timer.completed);
+    }
+
+    #[test]
+    fn test_create_timer_with_negative_duration() {
+        let state = TimerState::new();
+        let timer = state.create_timer(
+            "negative_timer".to_string(),
+            "Negative Duration Timer".to_string(),
+            -1000
+        ).unwrap();
+
+        // System allows negative durations (might be intentional behavior)
+        assert_eq!(timer.duration_ms, -1000);
+        assert_eq!(timer.remaining_ms, -1000);
+    }
+
+    #[test]
+    fn test_timer_created_at_timestamp() {
+        let state = TimerState::new();
+        let before = chrono::Utc::now();
+        
+        let timer = state.create_timer(
+            "timestamp_test".to_string(),
+            "Timestamp Test".to_string(),
+            5000
+        ).unwrap();
+        
+        let after = chrono::Utc::now();
+        
+        // Parse the timestamp and verify it's within reasonable bounds
+        let created_at = chrono::DateTime::parse_from_rfc3339(&timer.created_at).unwrap();
+        let created_at_utc = created_at.with_timezone(&chrono::Utc);
+        assert!(created_at_utc >= before);
+        assert!(created_at_utc <= after);
+    }
+
+    #[test]
+    fn test_multiple_timer_management() {
+        let state = TimerState::new();
+        
+        // Create multiple timers with different properties
+        let _timer1 = state.create_timer("short".to_string(), "Short Timer".to_string(), 1000).unwrap();
+        let _timer2 = state.create_timer("long".to_string(), "Long Timer".to_string(), 60000).unwrap();
+        let _timer3 = state.create_timer("medium".to_string(), "Medium Timer".to_string(), 10000).unwrap();
+        
+        let all_timers = state.get_all_timers();
+        assert_eq!(all_timers.len(), 3);
+        
+        // Verify we can find each timer by ID
+        let timer_ids: std::collections::HashSet<String> = all_timers.iter().map(|t| t.id.clone()).collect();
+        assert!(timer_ids.contains("short"));
+        assert!(timer_ids.contains("long"));
+        assert!(timer_ids.contains("medium"));
+        
+        // Delete one timer and verify count
+        state.delete_timer("medium").unwrap();
+        assert_eq!(state.get_all_timers().len(), 2);
+        
+        // Verify the right timer was deleted
+        let remaining_ids: std::collections::HashSet<String> = state.get_all_timers().iter().map(|t| t.id.clone()).collect();
+        assert!(remaining_ids.contains("short"));
+        assert!(remaining_ids.contains("long"));
+        assert!(!remaining_ids.contains("medium"));
+    }
+
+    #[test]
+    fn test_timer_name_handling() {
+        let state = TimerState::new();
+        
+        // Test empty name
+        let timer1 = state.create_timer("empty_name".to_string(), "".to_string(), 5000).unwrap();
+        assert_eq!(timer1.name, "");
+        
+        // Test long name
+        let long_name = "A".repeat(1000);
+        let timer2 = state.create_timer("long_name".to_string(), long_name.clone(), 5000).unwrap();
+        assert_eq!(timer2.name, long_name);
+        
+        // Test name with special characters
+        let special_name = "Timer with émojis 🕐 and symbols!@#$%^&*()";
+        let timer3 = state.create_timer("special_name".to_string(), special_name.to_string(), 5000).unwrap();
+        assert_eq!(timer3.name, special_name);
+    }
+
+    #[test]
+    fn test_timer_id_edge_cases() {
+        let state = TimerState::new();
+        
+        // Test empty ID
+        let timer1 = state.create_timer("".to_string(), "Empty ID Timer".to_string(), 5000).unwrap();
+        assert_eq!(timer1.id, "");
+        
+        // Test very long ID
+        let long_id = "x".repeat(1000);
+        let timer2 = state.create_timer(long_id.clone(), "Long ID Timer".to_string(), 5000).unwrap();
+        assert_eq!(timer2.id, long_id);
+        
+        // Verify both timers exist
+        assert_eq!(state.get_all_timers().len(), 2);
+    }
+}
