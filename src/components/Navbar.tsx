@@ -1,5 +1,3 @@
-
-
 interface NavbarProps {
   onSettingsClick: () => void;
 }
