@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { Navbar } from "./components/Navbar";
@@ -647,10 +647,69 @@ export default function App() {
   const [selectedTimerId, setSelectedTimerId] = useState<string | null>(null);
   const [donePulse, setDonePulse] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [soundSettings, setSoundSettings] = useState<SoundSettings>({
-    soundFile: "/beep1.mp3",
-    volume: 0.5
+  const [soundSettings, setSoundSettings] = useState<SoundSettings>(() => {
+    const saved = localStorage.getItem('focusnook_sound_settings');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error('Failed to load sound settings:', e);
+      }
+    }
+    return {
+      soundFile: "/beep1.mp3",
+      volume: 0.5
+    };
   });
+
+  // Save sound settings to localStorage when they change and update ref
+  useEffect(() => {
+    localStorage.setItem('focusnook_sound_settings', JSON.stringify(soundSettings));
+    soundSettingsRef.current = soundSettings;
+  }, [soundSettings]);
+
+  // Track completed timers to avoid playing sound multiple times
+  const [_completedTimers, setCompletedTimers] = useState(new Set<string>());
+  
+  // Track currently playing audio to prevent overlapping sounds
+  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
+  const lastSoundPlayTime = useRef<number>(0);
+  const soundSettingsRef = useRef(soundSettings);
+  
+  // Function to play completion sound safely with debounce
+  const playCompletionSound = (soundFile: string, volume: number) => {
+    if (soundFile === "none") return;
+    
+    const now = Date.now();
+    // Prevent playing sound more than once per 500ms
+    if (now - lastSoundPlayTime.current < 500) {
+      return;
+    }
+    lastSoundPlayTime.current = now;
+    
+    // Stop any currently playing audio
+    if (currentAudioRef.current) {
+      currentAudioRef.current.pause();
+      currentAudioRef.current.currentTime = 0;
+    }
+    
+    // Create and play new audio
+    const audio = new Audio(soundFile);
+    audio.volume = volume;
+    currentAudioRef.current = audio;
+    
+    // Clear reference when audio ends
+    audio.addEventListener('ended', () => {
+      if (currentAudioRef.current === audio) {
+        currentAudioRef.current = null;
+      }
+    });
+    
+    audio.play().catch((error) => {
+      console.error('Failed to play completion sound:', error);
+      currentAudioRef.current = null;
+    });
+  };
 
   useEffect(() => {
     const unsubs: Array<() => void> = [];
@@ -691,6 +750,16 @@ export default function App() {
 
     loadTimers();
 
+    return () => {
+      document.removeEventListener("keydown", handleKeyPress);
+      unsubs.forEach((u) => u());
+    };
+  }, []);
+
+  // Set up timer listeners once, use refs for dynamic values  
+  useEffect(() => {
+    const unsubs: Array<() => void> = [];
+
     // Listen for timer tick events from Rust backend
     const setupTimerListeners = async () => {
       const unlistenTick = await listen<{timer_id: string, remaining_ms: number, duration_ms: number, running: boolean}>("timer:tick", (event) => {
@@ -706,22 +775,29 @@ export default function App() {
 
       const unlistenDone = await listen<{timer_id: string, finished_at: string}>("timer:done", (event) => {
         const { timer_id } = event.payload;
+        
+        // Check if we've already played sound for this timer completion
+        setCompletedTimers(prev => {
+          const hasCompleted = prev.has(timer_id);
+          
+          if (!hasCompleted) {
+            // First time this timer completed - play sound using current settings
+            const currentSettings = soundSettingsRef.current;
+            playCompletionSound(currentSettings.soundFile, currentSettings.volume);
+            setDonePulse(true);
+            setTimeout(() => setDonePulse(false), 1200);
+            
+            return new Set([...prev, timer_id]);
+          }
+          return prev;
+        });
+
         setTimers(prevTimers => 
-          prevTimers.map(timer => {
-            if (timer.id === timer_id) {
-              // Timer just completed - play sound according to settings
-              if (soundSettings.soundFile !== "none") {
-                const audio = new Audio(soundSettings.soundFile);
-                audio.volume = soundSettings.volume;
-                audio.play().catch(() => {});
-              }
-              setDonePulse(true);
-              setTimeout(() => setDonePulse(false), 1200);
-              
-              return { ...timer, remaining_ms: 0, running: false, completed: true };
-            }
-            return timer;
-          })
+          prevTimers.map(timer => 
+            timer.id === timer_id 
+              ? { ...timer, remaining_ms: 0, running: false, completed: true }
+              : timer
+          )
         );
       });
 
@@ -731,10 +807,9 @@ export default function App() {
     setupTimerListeners();
 
     return () => {
-      document.removeEventListener("keydown", handleKeyPress);
       unsubs.forEach((u) => u());
     };
-  }, []);
+  }, []); // No dependencies - set up once
 
   const handleStartTimer = async (duration: number, name: string) => {
     try {
@@ -810,6 +885,12 @@ export default function App() {
       setTimers(prev => prev.map(t => 
         t.id === timerId ? { ...t, remaining_ms: t.duration_ms, running: false, completed: false } : t
       ));
+      // Remove from completed set so sound can play again if timer completes again
+      setCompletedTimers(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(timerId);
+        return newSet;
+      });
     } catch (error) {
       console.error("Failed to reset timer:", error);
     }
